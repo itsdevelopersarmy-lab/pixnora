@@ -4,11 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "server": "node server.ts",
+    "start": "node server.ts",
+    "build": "echo \"No build step required for backend\""
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
