@@ -4,8 +4,8 @@
 "version": "0.0.0",
 "type": "module",
 "scripts": {
-"start": "tsx server.ts",
-"server": "tsx watch server.ts",
+"start": "tsx backend/server.ts",
+"server": "tsx watch backend/server.ts",
 "build": "echo "No build step required for backend""
 },
 "dependencies": {
