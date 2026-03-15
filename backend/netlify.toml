@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "node server.ts"
   publish = "dist"
 
 [build.environment]
