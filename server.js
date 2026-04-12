@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://itsnexverra_db_user:J2ie2HjBEMwMZr5B@cluster0.nazgm1s.mongodb.net/?appName=Cluster0";
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb+srv://itsnexverra_db_user:J2ie2HjBEMwMZr5B@cluster0.nazgm1s.mongodb.net/?appName=Cluster0";
 const PORT = 10000;
 
 async function startServer() {
@@ -22,10 +22,42 @@ async function startServer() {
   } catch (err) {
     console.error("Failed to connect to MongoDB", err);
   }
-  const db = client.db();
+  const db = client.db("pixnora");
 
   const usersColl = db.collection("users");
   const sessionsColl = db.collection("sessions");
+
+  // Bootstrap demo users if they don't exist
+  const demoUsers = [
+    { 
+      email: 'admin@pixnora.ai', 
+      password: 'admin123', 
+      role: 'admin', 
+      displayName: 'Root Admin',
+      walletBalance: 1000,
+      subscriptionTier: "PRO",
+      transactions: [],
+      createdAt: new Date()
+    },
+    { 
+      email: 'user@pixnora.ai', 
+      password: 'user123', 
+      role: 'user', 
+      displayName: 'Demo User',
+      walletBalance: 10,
+      subscriptionTier: "FREE",
+      transactions: [],
+      createdAt: new Date()
+    }
+  ];
+
+  for (const demoUser of demoUsers) {
+    const exists = await usersColl.findOne({ email: demoUser.email });
+    if (!exists) {
+      await usersColl.insertOne(demoUser);
+      console.log(`Bootstrapped demo user: ${demoUser.email}`);
+    }
+  }
 
   // API Routes
   app.post("/api/auth/login", async (req, res) => {
