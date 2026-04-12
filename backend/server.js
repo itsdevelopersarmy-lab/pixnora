@@ -7,8 +7,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/pixnora";
-const PORT = 3000;
+const MONGODB_URI = process.env.MONGODB_URI || "MONGODB_URI=mongodb+srv://itsnexverra_db_user:J2ie2HjBEMwMZr5B@cluster0.nazgm1s.mongodb.net/?appName=Cluster0
+
+";
+const PORT = 10000;
 
 async function startServer() {
   const app = express();
