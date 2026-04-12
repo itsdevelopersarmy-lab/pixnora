@@ -1,118 +1,118 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { fileURLToPath } from "url";
+import { MongoClient } from "mongodb";
+import cors from "cors";
+import dotenv from "dotenv";
 
-// Fix __dirname for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
 
-// If Node < 18 install node-fetch
-let fetchFn = global.fetch;
-if (!fetchFn) {
-  fetchFn = (...args) =>
-    import("node-fetch").then(({ default: fetch }) => fetch(...args));
-}
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/pixnora";
+const PORT = 3000;
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 10000;
+  app.use(express.json());
+  app.use(cors());
 
-  app.use(express.json({ limit: "50mb" }));
+  const client = new MongoClient(MONGODB_URI);
+  try {
+    await client.connect();
+    console.log("Connected to MongoDB");
+  } catch (err) {
+    console.error("Failed to connect to MongoDB", err);
+  }
+  const db = client.db();
 
-  // =========================
-  // CORS PROXY API
-  // =========================
-  app.post("/api/proxy", async (req, res) => {
-    const { url, method, headers, body } = req.body;
+  const usersColl = db.collection("users");
+  const sessionsColl = db.collection("sessions");
 
-    if (!url) {
-      return res.status(400).json({
-        error: "URL is required",
-      });
-    }
-
-    try {
-      console.log(`[PROXY] ${method || "GET"} ${url}`);
-
-      const fetchOptions = {
-        method: method || "GET",
-        headers: {
-          "User-Agent": "Pixnora-AI-Orchestrator/1.0",
-          "Client-Agent": "Pixnora-AI:1.0:itsdevelopersarmy@gmail.com",
-          ...(headers || {}),
-        },
-      };
-
-      if (body && ["POST", "PUT", "PATCH"].includes(method)) {
-        fetchOptions.body =
-          typeof body === "string" ? body : JSON.stringify(body);
-
-        if (!fetchOptions.headers["Content-Type"]) {
-          fetchOptions.headers["Content-Type"] = "application/json";
-        }
-      }
-
-      const response = await fetchFn(url, fetchOptions);
-      const contentType = response.headers.get("content-type");
-
-      let responseData;
-
-      if (contentType && contentType.includes("application/json")) {
-        responseData = await response.json();
-      } else {
-        responseData = {
-          text: await response.text(),
-        };
-      }
-
-      console.log(`[PROXY] Response ${response.status}`);
-
-      res.status(response.status).json(responseData);
-    } catch (error) {
-      console.error("[PROXY ERROR]", error);
-
-      res.status(500).json({
-        error: "Proxy request failed",
-        details: error.message,
-      });
+  // API Routes
+  app.post("/api/auth/login", async (req, res) => {
+    const { email, password } = req.body;
+    const user = await usersColl.findOne({ email, password });
+    if (user) {
+      res.json({ success: true, user });
+    } else {
+      res.status(401).json({ success: false, message: "Invalid credentials" });
     }
   });
 
-  // =========================
-  // DEVELOPMENT (VITE)
-  // =========================
+  app.post("/api/auth/signup", async (req, res) => {
+    const { email, password, displayName, role } = req.body;
+    const existing = await usersColl.findOne({ email });
+    if (existing) {
+      return res.status(400).json({ success: false, message: "User already exists" });
+    }
+    const newUser = {
+      email,
+      password,
+      displayName,
+      role,
+      walletBalance: 10,
+      subscriptionTier: "FREE",
+      transactions: [{
+        id: `TX-INIT-${Date.now()}`,
+        type: 'Onboarding Bonus',
+        amount: 10,
+        timestamp: new Date(),
+        status: 'success'
+      }],
+      createdAt: new Date()
+    };
+    await usersColl.insertOne(newUser);
+    res.json({ success: true, user: newUser });
+  });
+
+  app.get("/api/user/:email", async (req, res) => {
+    const user = await usersColl.findOne({ email: req.params.email });
+    res.json(user);
+  });
+
+  app.put("/api/user/:email", async (req, res) => {
+    const { walletBalance, subscriptionTier, transactions } = req.body;
+    await usersColl.updateOne(
+      { email: req.params.email },
+      { $set: { walletBalance, subscriptionTier, transactions } }
+    );
+    res.json({ success: true });
+  });
+
+  app.get("/api/sessions/:email", async (req, res) => {
+    const sessions = await sessionsColl.find({ userEmail: req.params.email }).toArray();
+    res.json(sessions);
+  });
+
+  app.post("/api/sessions/:email", async (req, res) => {
+    const { sessions } = req.body;
+    await sessionsColl.deleteMany({ userEmail: req.params.email });
+    if (sessions && sessions.length > 0) {
+      await sessionsColl.insertMany(sessions.map((s) => {
+        const { _id, ...rest } = s;
+        return { ...rest, userEmail: req.params.email };
+      }));
+    }
+    res.json({ success: true });
+  });
+
+  // Vite middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
-
     app.use(vite.middlewares);
-  }
-
-  // =========================
-  // PRODUCTION BUILD
-  // =========================
-  else {
+  } else {
     const distPath = path.join(process.cwd(), "dist");
-
     app.use(express.static(distPath));
-
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  // =========================
-  // START SERVER
-  // =========================
   app.listen(PORT, "0.0.0.0", () => {
-    console.log("================================");
-    console.log(`Server running on port ${PORT}`);
-    console.log(`http://localhost:${PORT}`);
-    console.log("================================");
+    console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(console.error);
